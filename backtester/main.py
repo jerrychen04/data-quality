@@ -1,6 +1,6 @@
 import pandas as pd
 from data_source import YahooFinanceDataSource
-from order_generator import MeanReversionOrderGenerator
+from order_generator import MeanReversionOrderGenerator, BettingAgainstCorrelationOrderGenerator, BettingAgainstBetaOrderGenerator
 from backtest_engine import EquityBacktestEngine
 from metrics import ExtendedMetrics
 
@@ -10,11 +10,11 @@ def main():
     Example of using the backtester to backtest a mean reversion strategy on a portfolio of equities.
     """
     data_source = YahooFinanceDataSource()
-    order_generator = MeanReversionOrderGenerator()
+    order_generator = BettingAgainstBetaOrderGenerator()
     backtest_engine = EquityBacktestEngine(initial_cash=100000)
     metrics_calculator = ExtendedMetrics()
 
-    tickers = ["AAPL", "MSFT", "GOOGL"]  
+    tickers = ["AAPL", "MSFT", "GOOGL", "SPY"]  
     data = data_source.get_historical_data(tickers, "2011-01-01", "2024-01-01")
     orders = order_generator.generate_orders(data)
 
