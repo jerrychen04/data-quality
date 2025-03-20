@@ -95,16 +95,24 @@ plt.savefig('opu_rolling_statistics.png')
 plt.close()
 
 # TRADING STRATEGY
-# Set up the strategy with parameters
 oil_strategy = OilUncertaintyOrderGenerator(
-    lookback_period=30,              # 30 days lookback for analyzing OPU trends
-    rebalance_frequency='MS',        # Monthly rebalance on start of month
-    starting_portfolio_value=100000, # Initial portfolio value
-    high_uncertainty_threshold=80,   # 80th percentile threshold for high uncertainty
-    low_uncertainty_threshold=20,    # 20th percentile threshold for low uncertainty
-    trend_period=10,                 # 10-day period for trend confirmation
-    position_hold_days=20            # Hold positions for 20 days
+    lookback_period=7,              
+    rebalance_frequency='MS',        
+    starting_portfolio_value=100000, 
+    high_uncertainty_threshold=70,   
+    low_uncertainty_threshold=30,    
+    trend_period=5,                 
+    position_hold_days=10            
 )
+# oil_strategy = OilUncertaintyOrderGenerator(
+#     lookback_period=30,              # 30 days lookback for analyzing OPU trends
+#     rebalance_frequency='MS',        # Monthly rebalance on start of month
+#     starting_portfolio_value=100000, # Initial portfolio value
+#     high_uncertainty_threshold=80,   # 80th percentile threshold for high uncertainty
+#     low_uncertainty_threshold=20,    # 20th percentile threshold for low uncertainty
+#     trend_period=10,                 # 10-day period for trend confirmation
+#     position_hold_days=20            # Hold positions for 20 days
+# )
 
 orders = oil_strategy.generate_orders(sp500_data, oil_csv_path='data/oil.csv')
 print(f"Generated {len(orders)} orders.")
