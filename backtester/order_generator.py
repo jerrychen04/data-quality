@@ -151,15 +151,18 @@ class StableMinusRiskyOrderGenerator:
             if len(df_up_to_date) < self.lookback_period:
                 continue
             recent = df_up_to_date.iloc[-self.lookback_period:]
-            daily_returns = recent['Adj Close'].pct_change().dropna()
+            daily_returns = recent['Adj Close'].pct_change(fill_method=None).dropna()
             if len(daily_returns) > 0:
                 avg_daily_return = daily_returns.mean()
+                if isinstance(avg_daily_return, pd.Series):
+                    avg_daily_return = avg_daily_return.iloc[0]
+
                 ann_return = avg_daily_return * 252
                 predicted_returns[ticker] = ann_return
         return predicted_returns
 
     def generate_orders_for_date(self, predicted_returns, date):
-        pr_series = pd.Series(predicted_returns).dropna()
+        pr_series = pd.Series(predicted_returns).dropna().astype(float)
         if pr_series.empty:
             return []
         sorted_by_pr = pr_series.sort_values()
