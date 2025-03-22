@@ -183,6 +183,7 @@ class StableMinusRiskyOrderGenerator:
                     "ticker": ticker,
                     "quantity": quantity
                 })
+                print(f"Buying {ticker} on {date}")
         for ticker in risky_tickers:
             quantity = int(risky_allocation_per_ticker)
             if quantity > 0:
@@ -192,6 +193,7 @@ class StableMinusRiskyOrderGenerator:
                     "ticker": ticker,
                     "quantity": quantity
                 })
+                print(f"Selling {ticker} on {date}")
         return orders
 
     def generate_orders(self, data: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
