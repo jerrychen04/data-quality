@@ -134,83 +134,150 @@ class BettingAgainstBetaOrderGenerator(OrderGenerator):
 
         return all_orders
     
-class StableMinusRiskyOrderGenerator:
-    def __init__(self, lookback_period = 60, rebalance_frequency = 'ME', starting_portfolio_value = 100000):
+
+class StableMinusRiskyOrderGenerator(OrderGenerator):
+    """Strategy that goes long on low volatility stocks and short on high volatility stocks."""
+    
+    def __init__(self, lookback_period: int = 60, rebalance_frequency: str = 'ME', starting_portfolio_value: float = 100000):
         self.lookback_period = lookback_period
         self.rebalance_frequency = rebalance_frequency
         self.starting_portfolio_value = starting_portfolio_value
+    
+    def calculate_volatility(self, returns: pd.Series) -> float:
+        """
+        Calculate volatility (standard deviation) of returns.
+        """
+        return returns.std()
 
-    def calculate_predicted_returns(self, data, date):
-        predicted_returns = {}
+    def calculate_volatilities(self, data, date):
+        """
+        Calculate volatility for each stock up to the given date.
+        """
+        volatility_values = {}
         for ticker, df in data.items():
-            if len(df) < self.lookback_period:
+            if ticker == 'SPY':
                 continue
-            if df.index[-1] < date:
-                continue
-            df_up_to_date = df.loc[:date]
-            if len(df_up_to_date) < self.lookback_period:
-                continue
-            recent = df_up_to_date.iloc[-self.lookback_period:]
-            daily_returns = recent['Adj Close'].pct_change(fill_method=None).dropna()
-            if len(daily_returns) > 0:
-                avg_daily_return = daily_returns.mean()
-                if isinstance(avg_daily_return, pd.Series):
-                    avg_daily_return = avg_daily_return.iloc[0]
 
-                ann_return = avg_daily_return * 252
-                predicted_returns[ticker] = ann_return
-        return predicted_returns
+            if 'Adj Close' not in df.columns:
+                continue
+                
+            stock_returns = df['Adj Close'].pct_change(fill_method=None).dropna()
+            
+            # Filter returns up to the current date
+            if date not in stock_returns.index:
+                continue
+                
+            mask = stock_returns.index <= date
+            recent_returns = stock_returns.loc[mask]
+            
+            if len(recent_returns) < self.lookback_period:
+                continue
+                
+            recent_returns = recent_returns.iloc[-self.lookback_period:]
+            volatility = self.calculate_volatility(recent_returns)
+            
+            # Only add non-NA volatility values
+            if not pd.isna(volatility):
+                volatility_values[ticker] = volatility
+            
+        return volatility_values
 
-    def generate_orders_for_date(self, predicted_returns, date):
-        pr_series = pd.Series(predicted_returns).dropna().astype(float)
-        if pr_series.empty:
+    def generate_orders_for_date(self, volatility_values, date):
+        """
+        Generate orders for a specific date based on volatility values.
+        """
+        if not volatility_values:
             return []
-        sorted_by_pr = pr_series.sort_values()
-        num_stocks = len(sorted_by_pr)
+            
+        volatility_series = pd.Series(volatility_values)
+        volatility_series = volatility_series.dropna()
+        
+        if len(volatility_series) == 0:
+            return []
+            
+        sorted_volatility = volatility_series.sort_values()
+        
+        num_stocks = len(sorted_volatility)
         decile_size = max(int(num_stocks * 0.1), 1)
-        risky_tickers = sorted_by_pr.head(decile_size).index.tolist()
-        stable_tickers = sorted_by_pr.tail(decile_size).index.tolist()
-        half_capital = self.starting_portfolio_value / 2.0
-        stable_allocation_per_ticker = half_capital / decile_size
-        risky_allocation_per_ticker = half_capital / decile_size
+        
+        low_vol_tickers = sorted_volatility.head(decile_size).index.tolist()
+        high_vol_tickers = sorted_volatility.tail(decile_size).index.tolist()
+        
+        if not low_vol_tickers or not high_vol_tickers:
+            return []
+        
+        avg_low_vol = float(volatility_series[low_vol_tickers].mean())
+        avg_high_vol = float(volatility_series[high_vol_tickers].mean())
+
+        if avg_low_vol == 0 or avg_high_vol == 0 or (avg_low_vol + avg_high_vol) == 0:
+            return []
+        
+        # find weights to make it beta neutral
+        low_vol_weight = avg_high_vol / (avg_low_vol + avg_high_vol)
+        high_vol_weight = avg_low_vol / (avg_low_vol + avg_high_vol)
+        
         orders = []
-        for ticker in stable_tickers:
-            quantity = int(stable_allocation_per_ticker)
-            if quantity > 0:
-                orders.append({
-                    "date": date,
-                    "type": "BUY",
-                    "ticker": ticker,
-                    "quantity": quantity
-                })
-                print(f"Buying {ticker} on {date}")
-        for ticker in risky_tickers:
-            quantity = int(risky_allocation_per_ticker)
-            if quantity > 0:
-                orders.append({
-                    "date": date,
-                    "type": "SELL",
-                    "ticker": ticker,
-                    "quantity": quantity
-                })
-                print(f"Selling {ticker} on {date}")
+        
+        # Long bottom decile (stable stocks)
+        for ticker in low_vol_tickers:
+            quantity = int(self.starting_portfolio_value * low_vol_weight / len(low_vol_tickers))
+            orders.append({
+                "date": date,
+                "type": "BUY",
+                "ticker": ticker,
+                "quantity": quantity
+            })
+            print(f"Buying {ticker} on {date}")
+        
+        # Short top decile (risky stocks)
+        for ticker in high_vol_tickers:
+            quantity = int(self.starting_portfolio_value * high_vol_weight / len(high_vol_tickers))
+            orders.append({
+                "date": date,
+                "type": "SELL",
+                "ticker": ticker,
+                "quantity": quantity
+            })
+            print(f"Selling {ticker} on {date}")
+            
         return orders
 
     def generate_orders(self, data: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
-        if 'SPY' not in data:
-            raise ValueError("SPY data is required.")
-        spy_data = data['SPY']
-        spy_dates = spy_data.index
-        if len(spy_dates) <= self.lookback_period:
-            raise ValueError("Not enough SPY data.")
-        start_date = spy_dates[self.lookback_period]
-        end_date = spy_dates[-1]
+        """
+        Generate orders based on the stable-minus-risky strategy.
+        """
+        # Choose a reference ticker to determine date range
+        reference_ticker = next(iter(data))
+        while reference_ticker == 'SPY' and len(data) > 1:
+            reference_ticker = next(iter([t for t in data.keys() if t != 'SPY']))
+            
+        reference_data = data[reference_ticker]['Adj Close']
+        
+        # Calculate returns for date range determination
+        returns = reference_data.pct_change().dropna()
+        
+        if len(returns) <= self.lookback_period:
+            return []
+            
+        start_date = returns.index[self.lookback_period]
+        end_date = returns.index[-1]
+        
+        # Define rebalance dates
         rebalance_dates = pd.date_range(start=start_date, end=end_date, freq=self.rebalance_frequency)
+        
+        # Filter to only dates that exist in our data
+        valid_dates = [date for date in rebalance_dates if date in returns.index]
+        
         all_orders = []
-        for date in rebalance_dates:
-            pr_values = self.calculate_predicted_returns(data, date)
-            if len(pr_values) < 20:
+        
+        for date in valid_dates:
+            volatility_values = self.calculate_volatilities(data, date)
+            
+            # Ensure we have enough stocks to perform the strategy
+            if len(volatility_values) < 20:
                 continue
-            orders = self.generate_orders_for_date(pr_values, date)
-            all_orders.extend(orders)
+                
+            date_orders = self.generate_orders_for_date(volatility_values, date)
+            all_orders.extend(date_orders)
+            
         return all_orders
