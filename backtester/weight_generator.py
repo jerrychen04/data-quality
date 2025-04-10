@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
+from scipy import stats
 
 class WeightsGenerator(ABC):
     @abstractmethod
@@ -17,12 +18,29 @@ class BettingAgainstBetaWeightsGenerator(WeightsGenerator):
     
     def calculate_beta(self, stock_returns: pd.Series, market_returns: pd.Series) -> float:
         """
-        Calculate beta of a stock relative to the market.
+        Calculate beta using scipy's more numerically stable least squares implementation.
         """
-        covariance = stock_returns.cov(market_returns)
-        market_variance = market_returns.var()
-        beta = covariance / market_variance
-        return beta
+        try:          
+            valid_data = pd.concat([stock_returns, market_returns], axis=1).dropna()
+            
+            if len(valid_data) < 10:
+                return np.nan
+                
+            stock_returns = valid_data.iloc[:, 0].values
+            market_returns = valid_data.iloc[:, 1].values
+            
+            # Add constant term for intercept
+            X = np.column_stack([np.ones(len(market_returns)), market_returns])
+            result = stats.linregress(market_returns, stock_returns)
+            beta = result.slope
+            if abs(beta) > 5:
+                return np.nan
+                
+            return beta
+            
+        except Exception as e:
+            print(f"Error calculating beta: {e}")
+            return np.nan
 
     def calculate_betas(self, data, spy_returns, date):
         beta_values = {}
@@ -61,8 +79,8 @@ class BettingAgainstBetaWeightsGenerator(WeightsGenerator):
         avg_high_beta = np.mean([beta_values[ticker] for ticker in high_beta_tickers])
         
         # this is dollar neutral
-        long_dollar_allocation = 0.5
-        short_dollar_allocation = -0.5
+        long_dollar_allocation = 1
+        short_dollar_allocation = -1
         
         # The goal is to have: long_dollar_allocation * avg_low_beta + short_dollar_allocation * avg_high_beta = 0
         # adjust the weights within each group while maintaining the 50/50 split
