@@ -10,27 +10,6 @@ class OrderGenerator(ABC):
         """Generate orders given historical price data."""
         pass
 
-class MeanReversionOrderGenerator(OrderGenerator):
-    """Mean reversion strategy implementation with 100-day rolling window."""
-    def generate_orders(self, data: pd.DataFrame) -> List[Dict[str, Any]]:
-        orders = []
-        tickers = data.columns
-
-        for ticker in tickers:
-            ticker_data = data[ticker].to_frame(name='Adj Close')
-            ticker_data['100_day_avg'] = ticker_data['Adj Close'].rolling(window=100).mean()
-
-            for date, row in ticker_data.iterrows():
-                if pd.isna(row['100_day_avg']):
-                    continue
-                if row['Adj Close'] < row['100_day_avg']:
-                    orders.append({"date": date, "type": "BUY", "ticker": ticker, "quantity": 100})
-                else:
-                    orders.append({"date": date, "type": "SELL", "ticker": ticker, "quantity": 100})
-
-        return orders
-
-
 class BettingAgainstBetaOrderGenerator(OrderGenerator):
     """Betting Against Beta (BAB) strategy implementation."""
     
@@ -86,9 +65,6 @@ class BettingAgainstBetaOrderGenerator(OrderGenerator):
         high_beta_weight = avg_low_beta / (avg_low_beta + avg_high_beta)
 
         orders = []
-
-        # TODO: Implement position sizing based on portfolio value / parameterization for leverage to control MAX drawdown metric (sharpe should be the same)
-        # long bottom decile, short top decile of beta stocks
         for ticker in low_beta_tickers:
             quantity = int(self.starting_portfolio_value * low_beta_weight / decile_size)
             orders.append({

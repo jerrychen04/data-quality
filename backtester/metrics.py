@@ -5,52 +5,55 @@ from typing import Dict
 import matplotlib.pyplot as plt
 
 class Metrics(ABC):
-    """Interface for calculating portfolio metrics."""
-    
+
     @abstractmethod
-    def calculate(self, portfolio_values: pd.Series, returns: pd.Series, benchmark_returns: pd.Series = None) -> Dict[str, float]:
-        """Calculate performance metrics from portfolio values and returns."""
+    def calculate(self, portfolio_values: pd.Series, returns: pd.Series, weights: pd.DataFrame = None, benchmark_returns: pd.Series = None) -> Dict[str, float]:
         pass
 
 
 class ExtendedMetrics(Metrics):
-    """Extended metrics calculator implementation."""
-    
-    def calculate(self, portfolio_values: pd.Series, returns: pd.Series, benchmark_returns: pd.Series = None) -> Dict[str, float]:
+
+    def calculate(self, portfolio_values: pd.Series, returns: pd.Series, weights: pd.DataFrame = None, benchmark_returns: pd.Series = None) -> Dict[str, float]:
         metrics = {}
-        
-        metrics['Daily Return'] = returns.mean()
-        metrics['Cumulative Return'] = (1 + returns).prod() - 1
-        metrics['Log Return'] = np.log(1 + returns).mean()
+        if returns.empty:
+            print("Warning: Empty returns series, cannot calculate metrics.")
+            return {}
 
-        # volatility is the standard deviation of returns
-        metrics['Volatility'] = returns.std() * np.sqrt(252)  # annualize volatility, 252 trading days in a yr
+        metrics['Cumulative Return (%)'] = ((portfolio_values.iloc[-1] / portfolio_values.iloc[0]) - 1) * 100
+        metrics['Annualized Return (%)'] = ((1 + returns.mean())**252 - 1) * 100
+        metrics['Annualized Volatility (%)'] = returns.std() * np.sqrt(252) * 100
 
-        # TODO: this part is buggy, need to fix
-        # if benchmark_returns is not None:
-        #     metrics['Information Coefficient'] = returns.corr(benchmark_returns)
-        # else:
-        #     metrics['Information Coefficient'] = None
+        risk_free_rate = 0.0045 # Example annual risk-free rate
+        daily_risk_free = risk_free_rate / 252
+        excess_returns = returns - daily_risk_free
 
-        risk_free_rate = 0.0045  
-        excess_returns = returns - (risk_free_rate / 252)
-        # sharpe ratio is the excess return over the risk free rate divided by the volatility
-        metrics['Sharpe Ratio'] = excess_returns.mean() / excess_returns.std() * np.sqrt(252)
+        # Handle potential division by zero if std dev is zero
+        if excess_returns.std() > 1e-8:
+             metrics['Sharpe Ratio'] = (excess_returns.mean() / excess_returns.std()) * np.sqrt(252)
+        else:
+             metrics['Sharpe Ratio'] = np.nan # Or 0, depending on desired handling
+
 
         running_max = portfolio_values.cummax()
         drawdown = (portfolio_values / running_max) - 1
-        # max drawdown is the max loss from a peak to a trough in the portfolio value
-        metrics['Max Drawdown'] = drawdown.min()
+        metrics['Max Drawdown (%)'] = drawdown.min() * 100
 
-        # val at risk (VaR) 1 day horizon. 5% quantile. this is the max loss we can expect with 95% confidence
-        metrics['VaR 5%'] = returns.quantile(0.05)
+        metrics['VaR 5% Daily (%)'] = returns.quantile(0.05) * 100
+        metrics['CVaR 5% Daily (%)'] = returns[returns <= returns.quantile(0.05)].mean() * 100
+
+        if weights is not None:
+             weight_diff = abs(weights - weights.shift(1))
+             daily_turnover = 0.5 * weight_diff.sum(axis=1)
+             metrics['Average Daily Turnover (%)'] = daily_turnover.mean() * 100
+
         return metrics
 
-    def plot_returns(self, returns: pd.Series, title: str = "Portfolio Returns"):
-        plt.figure(figsize=(10, 6))
-        returns.cumsum().plot()
+    def plot_returns(self, portfolio_values: pd.Series, title: str = "Portfolio Value Over Time"):
+        plt.figure(figsize=(12, 7))
+        portfolio_values.plot()
         plt.title(title)
         plt.xlabel("Date")
-        plt.ylabel("Cumulative Returns")
-        plt.grid(True)
+        plt.ylabel("Portfolio Value ($)")
+        # plt.yscale('log') # Often useful for long periods
+        plt.grid(True, which="both", ls="--", linewidth=0.5)
         plt.show()
