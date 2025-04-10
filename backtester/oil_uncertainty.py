@@ -20,7 +20,7 @@ class OilUncertaintyOrderGenerator(OrderGenerator):
         lookback_period: int = 30, 
         rebalance_frequency: str = 'MS', 
         starting_portfolio_value: float = 100000,
-        high_uncertainty_threshold: float = 90,
+        high_uncertainty_threshold: float = 80,
         low_uncertainty_threshold: float = 20,
         trend_period: int = 10,
         position_hold_days: int = 20
@@ -56,7 +56,8 @@ class OilUncertaintyOrderGenerator(OrderGenerator):
         oil_data['opu_rolling_std'] = oil_data['OPU_index'].rolling(window=self.lookback_period).std()
         
         # percentile ranks
-        oil_data['opu_percentile'] = oil_data['OPU_index'].rolling(window=365).rank(pct=True) * 100
+        # TODO: can change window
+        oil_data['opu_percentile'] = oil_data['OPU_index'].rolling(window=100).rank(pct=True) * 100
         
         # rate of change
         oil_data['opu_1m_change'] = oil_data['OPU_index'].pct_change(periods=30)
@@ -175,12 +176,20 @@ class OilUncertaintyOrderGenerator(OrderGenerator):
         
         oil_data = self._load_oil_uncertainty_data(oil_csv_path)
         spy_data, oil_data = self._align_data_dates(spy_data, oil_data)
-        
-        start_date = oil_data.index[self.lookback_period]
-        end_date = oil_data.index[-1]
-        
+
+        start_date_spy = spy_data.index[self.lookback_period]
+        start_date_oil = oil_data.index[self.lookback_period]
+        start_date = max(start_date_spy, start_date_oil)
+        end_date = min(spy_data.index[-1], oil_data.index[-1])
+
         trading_dates = pd.date_range(start=start_date, end=end_date, freq=self.rebalance_frequency)
-        trading_dates = trading_dates.intersection(spy_data.index)
+        trading_dates = trading_dates.intersection(spy_data.index).intersection(oil_data.index)
+
+        # start_date = oil_data.index[self.lookback_period]
+        # end_date = oil_data.index[-1]
+        
+        # trading_dates = pd.date_range(start=start_date, end=end_date, freq=self.rebalance_frequency)
+        # trading_dates = trading_dates.intersection(spy_data.index)
         
         all_orders = []
         current_position = None

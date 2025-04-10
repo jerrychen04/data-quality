@@ -190,7 +190,7 @@ plt.plot(benchmark_series.index, benchmark_series,
 
 plt.title('Oil Uncertainty Strategy vs SPY Benchmark', fontsize=16)
 plt.xlabel('Date', fontsize=14)
-plt.ylabel('Portfolio Value ($)', fontsize=14)
+plt.ylabel('Portfolio Value ($ Millions)', fontsize=14)
 plt.grid(True, alpha=0.3)
 plt.legend(fontsize=12)
 plt.tight_layout()
@@ -207,3 +207,5 @@ metrics = metrics_calculator.calculate(
 print("\nPerformance Metrics:")
 for key, value in metrics.items():
     print(f"{key}: {value}")
+
+portfolio_values_df.to_csv('portfolio_values.csv', index=True)
