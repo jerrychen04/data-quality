@@ -1,11 +1,11 @@
-# Millennium Quantitative Research Playground Project Setup and Usage
+# Factor Research Playground Project Setup and Usage
 
 ## Installation
 
 1. **Clone the repository:**
     ```sh
-    git clone https://github.com/jerrychen04/millennium-data-quality.git
-    cd millennium-data-quality
+    git clone https://github.com/jerrychen04/data-quality.git
+    cd data-quality
     ```
 
 2. **Create a conda environment:**
